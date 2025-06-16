@@ -1,0 +1,71 @@
+services:
+  rag_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_pdf_analyzer
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./output:/app/output
+      # Pour le développement: montage du code source
+      - ./app:/app/app
+      - ./requirements.txt:/app/requirements.txt
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - rag_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_llava
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - rag_network
+    environment:
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 60s
+
+  # Service pour initialiser les modèles Ollama
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama_init
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - rag_network
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: |
+      sh -c "
+        echo 'Waiting for Ollama to be ready...'
+        sleep 10
+        echo 'Pulling llava model...'
+        ollama pull llava:latest
+        echo 'Pulling embedding model...'
+        ollama pull nomic-embed-text:latest
+        echo 'Models ready!'
+      "
+    restart: "no"
+
+volumes:
+  ollama_data:
+
+networks:
+  rag_network:
+    driver: bridge
