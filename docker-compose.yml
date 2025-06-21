@@ -17,6 +17,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     networks:
       - rag_network
 
@@ -39,6 +41,7 @@ services:
       timeout: 15s
       retries: 10
       start_period: 60s
+    # Suppression de la ligne "command: init-ollama"
 
   # Service pour initialiser les modèles Ollama
   ollama-init:
@@ -51,16 +54,40 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+    environment:
+      - OLLAMA_HOST=ollama:11434
     entrypoint: |
-      sh -c "
-        echo 'Waiting for Ollama to be ready...'
-        sleep 10
-        echo 'Pulling llava model...'
+      sh -c '
+        echo "🚀 Initialisation d'\''Ollama..."
+        echo "⏳ Attente du démarrage d'\''Ollama..."
+        
+        # Attendre qu'\''Ollama soit prêt
+        until ollama list > /dev/null 2>&1; do
+            echo "Ollama pas encore prêt, attente..."
+            sleep 5
+        done
+        
+        echo "✅ Ollama est démarré!"
+        
+        # Télécharger le modèle LLaVA
+        echo "📥 Téléchargement du modèle LLaVA..."
         ollama pull llava:latest
-        echo 'Pulling embedding model...'
+        
+        # Télécharger le modèle d'\''embedding
+        echo "📥 Téléchargement du modèle d'\''embedding..."
         ollama pull nomic-embed-text:latest
-        echo 'Models ready!'
-      "
+
+        # Télécharger un modèle léger pour le texte
+        echo "📥 Téléchargement du modèle Phi-3 Mini (texte léger)..."
+        ollama pull phi3:mini
+
+        
+        # Vérifier les modèles installés
+        echo "🔍 Vérification des modèles installés:"
+        ollama list
+        
+        echo "🎉 Initialisation terminée!"
+      '
     restart: "no"
 
 volumes:
